@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QFrame,
     QGridLayout,
-    QMessageBox
+    QMessageBox,
 )
 from PyQt6.QtGui import QPixmap, QColor, QIcon
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
@@ -26,15 +26,13 @@ from PyQt6.QtCore import QTimer
 from updateUtils import checkUpdate
 from PyQt6 import QtCore
 import os
+import time, tempfile, os
+
 
 # ================= AES 配置 =================
 def resource_path(relative_path):
-    # Nuitka 打包后资源会在 sys._MEIPASS 下
-    if getattr(sys, "frozen", False):
-        base_path = sys._MEIPASS
-    else:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
+    """获取打包后资源的真实路径"""
+    return os.path.join(os.path.dirname(__file__), relative_path)
 
 
 MAIN_QSS = """/* ================= 全局 ================= */
@@ -188,6 +186,7 @@ QProgressDialog QPushButton:pressed {
     background-color: #dd6161;
 }
 """
+
 
 class UpdateThread(QThread):
     message = pyqtSignal(str)
@@ -425,7 +424,7 @@ class AppCardWidget(QFrame):
         )
         progress_dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
         progress_dialog.setWindowTitle("下载应用")
-        progress_dialog.setWindowIcon(QIcon(resource_path("icon.ico"))) 
+        progress_dialog.setWindowIcon(QIcon(resource_path("icon.ico")))
         progress_dialog.canceled.connect(lambda: cancel_flag.update({"cancel": True}))
         progress_dialog.show()
 
@@ -460,14 +459,16 @@ class Worker(QThread):
     def run(self):
         try:
             bind_device(self.swdid, self.email, self.model)
-        
 
             apps = get_all_apps(self.swdid, self.email, self.model)
             self.apps_loaded.emit(apps)
 
         except Exception as e:
             print("绑定设备失败:", e)
-            self.error_signal.emit("信息有误，绑定失败！请检查设备ID、机型和账号是否正确。")
+            self.error_signal.emit(
+                "信息有误，绑定失败！请检查设备ID、机型和账号是否正确。"
+            )
+
 
 # ================= 主窗口 =================
 class MainWindow(QWidget):
@@ -476,6 +477,8 @@ class MainWindow(QWidget):
 
         self.setWindowTitle("Linspirer App 获取工具")
         self.resize(800, 600)
+        
+        self.setWindowIcon(QIcon(resource_path("icon.ico")))
 
         # 去系统标题栏
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
@@ -534,7 +537,9 @@ class MainWindow(QWidget):
             self.email.text().strip(),
             self.model.text().strip(),
         )
-        self.worker.error_signal.connect(lambda msg: QMessageBox.warning(self, "错误", msg))
+        self.worker.error_signal.connect(
+            lambda msg: QMessageBox.warning(self, "错误", msg)
+        )
         self.worker.apps_loaded.connect(self.show_apps)
         self.worker.start()
 
@@ -560,8 +565,13 @@ if __name__ == "__main__":
         splash_pix,
         Qt.WindowType.WindowStaysOnTopHint,
     )
-    
+
     splash.setEnabled(False)  #
+    if "NUITKA_ONEFILE_PARENT" in os.environ:
+        splash_filename = os.path.join(tempfile.gettempdir(),"onefile_%d_splash_feedback.tmp" % int(os.environ["NUITKA_ONEFILE_PARENT"]))
+
+        if os.path.exists(splash_filename):
+            os.unlink(splash_filename)
 
     splash.show()
 
